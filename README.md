@@ -24,7 +24,7 @@ docker exec kafka_docker_v1-kafka-1 kafka-topics --list --bootstrap-server local
 docker logs -f python-consumer
 
 ## CONSULTA BBDD
-docker exec -it postgres psql -U admin -d transacciones_db -c "SELECT \* FROM transacciones;"
+docker exec -it postgres psql -U admin -d transacciones_db -c "SELECT * FROM transacciones;"
 
 ---
 
