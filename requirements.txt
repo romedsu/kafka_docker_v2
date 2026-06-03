@@ -1,4 +1,5 @@
-confluent-kafka
+# todas las dependencias para schema registry
+confluent-kafka[avro,schema-registry]
 psycopg2-binary
 fastavro
 requests
