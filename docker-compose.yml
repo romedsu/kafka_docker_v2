@@ -11,7 +11,13 @@ services:   # Aquí empiezan a definirse los componentes (contenedores) del sist
     image: confluentinc/cp-kafka:7.5.0 # Imagen oficial de Confluent (una versión profesional de Kafka).
     container_name: kafka
     depends_on: # Regla de orden: no arranques Kafka hasta que ZooKeeper esté listo.
-      - zookeeper
+      zookeeper:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     ports: # Mapeo de puertos: "Puerto en tu PC : Puerto dentro del contenedor".
       - "9092:9092" 
     environment: # Configuración crítica del Broker:
@@ -22,6 +28,26 @@ services:   # Aquí empiezan a definirse los componentes (contenedores) del sist
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1 # Como solo tenemos un broker, no podemos replicar (1 significa sin copia).
     volumes:
       - kafka_data:/var/lib/kafka/data
+
+   # --- GOBIERNO Y GESTIÓN --> Gobernaza de datos ---
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    container_name: schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      # Intenta hacer un GET al endpoint de estado del registro
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    ports:
+      - "8081:8081"
 
   # --- BBDD ---
   postgres:
@@ -42,45 +68,14 @@ services:   # Aquí empiezan a definirse los componentes (contenedores) del sist
       - postgres_data:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d #link con scripts .sql para creacion de tablas de bbdd
 
-   # --- GOBIERNO Y GESTIÓN --> Gobernaza de datos ---
-  schema-registry:
-    image: confluentinc/cp-schema-registry:7.5.0
-    container_name: schema-registry
-    depends_on:
-      - kafka
-    healthcheck:
-      # Intenta hacer un GET al endpoint de estado del registro
-      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    environment:
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
-    ports:
-      - "8081:8081"
 
   # --- APLICACIONES Y CONECTORES ---
-  consumer:
-    build: .  # Docker buscará un Dockerfile en la raíz para instalar librerías
-    container_name: python-consumer
-    depends_on:
-      postgres:
-        condition: service_healthy # El consumer espera a que el healthcheck de postgres sea correcto
-      kafka:
-        condition: service_started
-    volumes:
-      - ./src:/app
-      - ./schemas:/app/schemas
-    command: python /app/consumer_to_db.py
-
   producer: 
     build: .
     container_name: python-producer
     depends_on:
       kafka:
-        condition: service_started
+        condition: service_healthy
       schema-registry: 
         condition: service_healthy
     volumes:
@@ -89,6 +84,23 @@ services:   # Aquí empiezan a definirse los componentes (contenedores) del sist
     command: python /app/producer_bank.py
 
 
+  consumer:
+    build: .  # Docker buscará un Dockerfile en la raíz para instalar librerías
+    container_name: python-consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry: 
+        condition: service_healthy
+      postgres:
+        condition: service_healthy # El consumer espera a que el healthcheck de postgres sea correcto
+    volumes:
+      - ./src:/app
+      - ./schemas:/app/schemas
+    command: python /app/consumer_to_db.py
+
+
+# VOLUMENES
 volumes:
   kafka_data:
   postgres_data:   

@@ -7,6 +7,7 @@ from confluent_kafka.schema_registry.avro import AvroSerializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 
 logging.basicConfig(level=logging.INFO)
+logging.info("Iniciando PRODUCER...")
 
 # CONEXION productor --> KAFKA 
 config={
