@@ -1,0 +1,84 @@
+services:   # Aquí empiezan a definirse los componentes (contenedores) del sistema.
+
+  # --- INFRAESTRUCTURA DE MENSAJERÍA ---
+  zookeeper:  # Nombre de nuestro primer servicio.
+    image: confluentinc/cp-zookeeper:7.5.0 # La "receta" (imagen) que Docker descargará de internet.
+    container_name: zookeeper
+    environment: # Variables de configuración para que el contenedor sepa cómo comportarse.
+      ZOOKEEPER_CLIENT_PORT: 2181 # Define el puerto interno en docker por el que Kafka se comunicará con él.
+
+  kafka:      # Nombre de nuestro segundo servicio: el Broker.
+    image: confluentinc/cp-kafka:7.5.0 # Imagen oficial de Confluent (una versión profesional de Kafka).
+    container_name: kafka
+    depends_on: # Regla de orden: no arranques Kafka hasta que ZooKeeper esté listo.
+      - zookeeper
+    ports: # Mapeo de puertos: "Puerto en tu PC : Puerto dentro del contenedor".
+      - "9092:9092" 
+    environment: # Configuración crítica del Broker:
+      KAFKA_BROKER_ID: 1 # ID único de este Broker dentro del cluster.
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181 # Dirección donde el Broker encuentra al gerente (ZooKeeper).
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092 # Cómo se conectarán tus aplicaciones al Broker.
+      # KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9092,OUTSIDE://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1 # Como solo tenemos un broker, no podemos replicar (1 significa sin copia).
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+  # --- BBDD ---
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    healthcheck: # PETICION DE SALUD (si responde correctamente)
+      test: ["CMD-SHELL", "pg_isready -U admin -d transacciones_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: transacciones_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d #link con scripts .sql para creacion de tablas de bbdd
+
+   # --- GOBIERNO Y GESTIÓN --> Gobernaza de datos ---
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    container-name: schema-registry
+    depends_on:
+      - kafka
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    ports:
+      - "8081:8081"
+
+  # --- APLICACIONES Y CONECTORES ---
+  consumer:
+    build: .  # Docker buscará un Dockerfile en la raíz para instalar librerías
+    container_name: python-consumer
+    depends_on:
+      postgres:
+        condition: service_healthy # El consumer espera a que el healthcheck de postgres sea correcto
+      kafka:
+        condition: service_started
+    volumes:
+      - ./src:/app
+    command: python /app/consumer_to_db.py
+
+  producer: 
+    build: .
+    container_name: python-producer
+    depends_on:
+      kafka:
+        condition: service_started
+    volumes:
+      - ./src:/app
+    command: python /app/producer_bank.py
+
+
+volumes:
+  kafka_data:
+  postgres_data:    

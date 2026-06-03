@@ -1,0 +1,9 @@
+{
+  "type": "record",
+  "name": "Transaccion",
+  "namespace": "com.banco.streaming",
+  "fields": [
+    {"name": "usuario_id", "type": "int"},
+    {"name": "monto", "type": "float"}
+  ]
+}
