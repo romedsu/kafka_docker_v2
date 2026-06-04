@@ -58,8 +58,8 @@ try:
         # ejeculta el callback (delivery_report) con los mensajes de confirmacion de entrega anteriores
         producer.poll(0)
 
-        # Esperamos 10 segundos antes de generar la siguiente transacción
-        time.sleep(10)
+        # Esperamos 30 segundos antes de generar la siguiente transacción
+        time.sleep(30)
 
 except KeyboardInterrupt:
     logging.info("PRODUCER  detenido por el usuario.")

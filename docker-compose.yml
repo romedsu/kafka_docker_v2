@@ -29,7 +29,7 @@ services:   # Aquí empiezan a definirse los componentes (contenedores) del sist
     volumes:
       - kafka_data:/var/lib/kafka/data
 
-   # --- GOBIERNO Y GESTIÓN --> Gobernaza de datos ---
+   # --- GOBIERNO Y GESTIÓN --> Gobierno de datos ---
   schema-registry:
     image: confluentinc/cp-schema-registry:7.5.0
     container_name: schema-registry
