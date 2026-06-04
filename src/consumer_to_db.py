@@ -1,14 +1,16 @@
 # consumer_to_db.py
-import json
 import time
 import logging
-from confluent_kafka import Consumer
 import psycopg2
+from confluent_kafka import Consumer
+from confluent_kafka.schema_registry import SchemaRegistryClient
+from confluent_kafka.schema_registry.avro import AvroDeserializer
+from confluent_kafka.serialization import SerializationContext, MessageField
 
 # time.sleep(5)
 
 logging.basicConfig(level=logging.INFO)
-logging.info("Iniciando script...")
+logging.info("Iniciando CONSUMER...")
 
 # 0. Reintento de conexión
 def connect_with_retry():
@@ -22,17 +24,21 @@ def connect_with_retry():
             time.sleep(5)
 
 conn = connect_with_retry()
-logging.info("Esperando transacciones...")
 cur = conn.cursor()
+logging.info("Esperando transacciones...")
 
 # 1. Configuración de conexión
 conf = {'bootstrap.servers': 'kafka:9092', 'group.id': 'banco_group', 'auto.offset.reset': 'earliest'}
 consumer = Consumer(conf)
 consumer.subscribe(['transacciones-bancarias'])
 
-# conn = psycopg2.connect("dbname=transacciones_db user=admin password=password123 host=postgres")
+# SCHEMA REGISTRY
+# conexion
+schema_registry_client = SchemaRegistryClient({'url': 'http://schema-registry:8081'})
 
-# print("Esperando transacciones...")
+# deserializdor
+avro_deserializer = AvroDeserializer(schema_registry_client)
+
 
 try:
     while True:
@@ -42,28 +48,29 @@ try:
         if msg is None: 
             continue
      
-        raw_data = msg.value().decode('utf-8')
-        logging.info(f"Mensaje crudo recibido: {raw_data}")
-        
-        # 2. Procesar mensaje
-        try:
-            data = json.loads(msg.value().decode('utf-8'))
-            
-            # 3. Insertar en Postgres
-            cur.execute("INSERT INTO transacciones (usuario_id, monto) VALUES (%s, %s)", 
-                        (data['usuario_id'], data['monto']))
-            conn.commit()
-            logging.info(f"¡ÉXITO! Transacción guardada: {data}")
+        transaccion = avro_deserializer(msg.value(), SerializationContext(msg.topic(),  MessageField.VALUE))
 
-        except json.JSONDecodeError:
-            # Si el mensaje no es JSON, avisamos y seguimos vivos
-            print(f"Error: Mensaje recibido no es un JSON válido: {msg.value()}")
-            continue 
-        except KeyError as e:
-            # Si falta 'usuario_id' o 'monto'
-            print(f"Error: El JSON no tiene el formato esperado: {e}")
-            continue
+        if transaccion:
+            logging.info(f"Mensaje recibido: {transaccion}")
 
+            # 2. Procesar mensaje
+            try:
+               
+                # 3. Insertar en Postgres
+                cur.execute("INSERT INTO transacciones (usuario_id, monto) VALUES (%s, %s)", 
+                            (transaccion['usuario_id'], transaccion['monto']))
+                
+                conn.commit()
+                logging.info(f"Transacción guardada: {transaccion}\n")
+
+            except KeyError as e:
+                # Si falta 'usuario_id' o 'monto'
+                logging.error(f"Error de formato: El esquema no coincide con lo esperado: {e}")
+            except Exception as e:
+                # Captura errores de deserialización (ej: mensaje corrupto, esquema no encontrado)
+                logging.error(f"Error crítico al procesar mensaje: {e}")
+                continue
+             
 except KeyboardInterrupt:
     pass
 

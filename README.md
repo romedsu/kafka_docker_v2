@@ -5,28 +5,45 @@
 ## De forma manual se introducen datos (transacciones bancarias ficticias) para a través de Kafka, captar el evento y registrarlo en la BBDD de Postgre.
 
 ## CREAR TOPIC
-docker exec -it kafka_docker_v1-kafka-1 kafka-topics --create --topic transacciones-bancarias --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+```docker exec -it kafka_docker_v1-kafka-1 kafka-topics --create --topic transacciones-bancarias --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1 ```
 
-docker exec -it kafka kafka-topics --create --topic transacciones-bancarias --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+```docker exec -it kafka kafka-topics --create --topic transacciones-bancarias --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1```
 
-## CREAR PRODUCTOR
-docker exec -it kafka_docker_v1-kafka-1 kafka-console-producer --bootstrap-server localhost:9092 --topic transacciones-bancarias
+## CREAR | VER PRODUCTOR
+```docker exec -it kafka_docker_v2-kafka-1 kafka-console-producer --bootstrap-server localhost:9092 --topic transacciones-bancarias```
 
-docker exec -it kafka kafka-console-producer --bootstrap-server kafka:9092 --topic transacciones-bancarias
+```docker exec -it kafka kafka-console-producer --bootstrap-server kafka:9092 --topic transacciones-bancarias```
 
-## CREAR CONSUMIDOR (otra terminal)
-docker exec -it kafka_docker_v1-kafka-1 kafka-console-consumer -bootstrap-server localhost:9092 --topic transacciones-bancarias --from-beginning
+```docker logs -f python-producer```
+
+## CREAR | VER CONSUMIDOR (otra terminal)
+```docker exec -it kafka kafka-console-consumer -bootstrap-server localhost:9092 --topic transacciones-bancarias --from-beginning```
+
+```docker logs -f python-consumer```
 
 ## VER LISTA TOPICS creados
-docker exec kafka_docker_v1-kafka-1 kafka-topics --list --bootstrap-server localhost:9092
+```docker exec kafka_docker_v2-kafka-1 kafka-topics --list --bootstrap-server localhost:9092```
 
 ## LOGS (consumer)
-docker logs -f python-consumer
+```docker logs -f python-consumer``
 
 ## CONSULTA BBDD
-docker exec -it postgres psql -U admin -d transacciones_db -c "SELECT * FROM transacciones;"
+```docker exec -it postgres psql -U admin -d transacciones_db -c "SELECT * FROM transacciones;"```
 
 ---
+## ORDEN SECUENCIA ARRANQUE
+healthcheck --> comprobar que cada servicio ha arrancado correctamente y devuelve respuesta
+
+1. ZooKeeper: Es el primero. Sin él, Kafka no arranca.
+
+2. Kafka: Espera a zookeeper.
+
+3. Schema Registry: Espera a kafka (usando healthcheck).
+
+4. Base de Datos (Postgres): Puede arrancar en paralelo a Kafka.
+
+5. Productor y Consumidor: Son los últimos; esperan a que todo lo anterior sea healthy.
+
 
 ## SQL --> init-scripts--> scripts .sql de creación tablas de bbdd
 
